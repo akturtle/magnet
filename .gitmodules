@@ -1,0 +1,3 @@
+[submodule "mxnet_center_loss"]
+	path = mxnet_center_loss
+	url = https://github.com/pangyupo/mxnet_center_loss.git

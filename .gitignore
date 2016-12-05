@@ -1,0 +1,7 @@
+data/*
+model*/*
+*.pyc
+/.ipynb*
+*.txt
+im2rec
+*data/
