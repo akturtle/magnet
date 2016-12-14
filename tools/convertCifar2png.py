@@ -27,7 +27,7 @@ def main():
     print 'process batch: ',i  
     for data,label in zip(datas,labels):
       im = data.reshape(3,32,32).transpose(1,2,0)
-      imgName=imgSavePath+str(imgCnt)+'.jpg'
+      imgName=str(imgCnt)+'.jpg'
       cv2.imwrite(imgName,im)
       lines.append(str(imgCnt)+"\t"+str(label)+"\t"+imgName+'\n')
       imgCnt += 1
@@ -43,7 +43,7 @@ def main():
   print 'process test batch'  
   for data,label in zip(datas,labels):
     im = data.reshape(3,32,32).transpose(1,2,0)
-    imgName=imgSavePath+str(imgCnt)+'.jpg'
+    imgName=str(imgCnt)+'.jpg'
     cv2.imwrite(imgName,im)
     lines.append(str(imgCnt)+"\t"+str(label)+"\t"+imgName+'\n')
     imgCnt += 1

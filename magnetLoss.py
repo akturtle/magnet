@@ -66,9 +66,10 @@ class magnetLoss(mx.operator.CustomOp):
                if k>=D : 
                    k=0
                    m+=1
-            sigma = s.asnumpy()/(wrapSize - 1)
+            s = s/(batchSize - 1)
+            sigma = s.asnumpy()
             sigma = float(2*sigma[0])
-            auxSigma[ii:ii+1] = s
+            auxSigma[:] = s
             
             #calculate loss for wrap
             loss=mx.nd.zeros(1,ctx=xpu)

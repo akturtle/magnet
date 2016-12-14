@@ -71,7 +71,7 @@ def get_CNNF():
   relu1 = mx.symbol.Activation(data = conv1, act_type="relu")
   lrn1 = mx.symbol.LRN(data = relu1,alpha=0.0001,beta = 0.75, knorm=1,nsize=5)
   pool1 = mx.symbol.Pooling(data=lrn1,pool_type = "max",\
-                            kernel = (2,2),stride = (1,1))
+                            kernel = (2,2),stride = (2,2))
   
   #group2
   conv2 = mx.symbol.Convolution(
@@ -79,7 +79,7 @@ def get_CNNF():
   relu2 = mx.symbol.Activation(data = conv2, act_type="relu")
   lrn2 = mx.symbol.LRN(data = relu2,alpha=0.0001,beta = 0.75, knorm=1,nsize=5)
   pool2 = mx.symbol.Pooling(data=lrn2,pool_type = "max",\
-                            kernel = (2,2),stride = (1,1))
+                            kernel = (2,2),stride = (2,2))
   
   #group3
   conv3 = mx.symbol.Convolution(
@@ -95,7 +95,7 @@ def get_CNNF():
             num_filter = 256,pad =(1,1))
   relu5 = mx.symbol.Activation(data = conv5, act_type="relu")
   pool3 = mx.symbol.Pooling(data=relu5,pool_type = "max",\
-                            kernel = (2,2),stride = (1,1))
+                            kernel = (2,2),stride = (2,2))
   
   flatten = mx.symbol.Flatten(data=pool3)
   fc1 = mx.symbol.FullyConnected(data=flatten, num_hidden=4096)

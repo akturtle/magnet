@@ -5,3 +5,6 @@ model*/*
 *.txt
 im2rec
 *data/
+/*
+!*.py
+!.gitignore
