@@ -10,16 +10,16 @@ import mxnet as mx
 import numpy as np
 from random import shuffle
 from sklearn.neighbors import KNeighborsClassifier
-from class_wiseLoss import *
+from newLoss import *
 from get_simple_inception import get_simplet_inception
 def get_net(feature_len):
     label =  mx.sym.Variable('label')  
     flatten = get_simplet_inception()
     fc = mx.symbol.FullyConnected(data=flatten, \
                                   num_hidden=feature_len, name='fc')
-    bn_fc = mx.sym.BatchNorm(data=fc,name = 'bn_fc')
+    bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
     myloss=mx.symbol.Custom(data=bn_fc,label=label,\
-                                    name='myLoss',op_type = 'myLoss',\
+                                    name='myLoss',op_type = 'newLoss',\
                                     nNeighbors = 5,alpha = 0.7,\
                                     nClass = 10)
     loss = mx.symbol.MakeLoss(data=myloss,name='loss',)
@@ -34,11 +34,11 @@ def KNN_test(DataIter,featureExector,splitRatio,n_neighbors,hash_len):
         f = featureExector.predict(batch.data[0])
         f = np.squeeze(f)
         label = batch.label[0].asnumpy()
-        labels.extend(labels)
+        labels.extend(label)
         features.extend(f)
         i+=1
         #print i
-    data_label = zip(features,label)
+    data_label = zip(features,labels)
     shuffle(data_label)
     splitPoint = int(len(data_label)*splitRatio)
     test = data_label[0:splitPoint]
@@ -77,9 +77,9 @@ def centroidScore(DataIter,featureExector,hash_len,centroids):
   
   
   
-load_prefix = './cifar_myLoss_1024'
-load_epoch=10
-feature_size = 1024
+load_prefix = './cifar_new_128'
+load_epoch=79
+feature_size = 128
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(feature_size)
 batchSize = 128
@@ -130,7 +130,7 @@ feature_extractor = mx.model.FeedForward(ctx=mx.gpu(), symbol=fea_symbol, \
                                        allow_extra_params=True)
 score = KNN_test(DataIter=test_dataiter,\
                  featureExector=feature_extractor,\
-                 splitRatio=0.2,
+                 splitRatio=0.1,
                  n_neighbors=50,
                  hash_len=feature_size) 
 print 'knn score :',score

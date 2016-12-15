@@ -10,7 +10,7 @@ import mxnet as mx
 import numpy as np
 from get_simple_inception import get_simplet_inception
 from get_centroid import get_centroid
-from class_wiseLoss import *
+from newLoss import *
 from math import isnan
 #define metric
 class Auc(mx.metric.EvalMetric):
@@ -31,9 +31,9 @@ def get_net(feature_len):
     flatten = get_simplet_inception()
     fc = mx.symbol.FullyConnected(data=flatten, \
                                   num_hidden=feature_len, name='fc')
-    bn_fc = mx.sym.BatchNorm(data=fc,name = 'bn_fc')
+    bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
     myloss=mx.symbol.Custom(data=bn_fc,label=label,\
-                                    name='myLoss',op_type = 'myLoss',\
+                                    name='myLoss',op_type = 'newLoss',\
                                     nNeighbors = 5,alpha = 0.7,\
                                     nClass = 10)
     loss = mx.symbol.MakeLoss(data=myloss,name='loss',)
@@ -41,9 +41,9 @@ def get_net(feature_len):
     
 
 #loading pretrianed  model 
-load_prefix = './cifar_myLoss_1024'
-load_epoch=20
-featureSize = 1024
+load_prefix = './cifar10_'
+load_epoch=1
+featureSize = 128
 numClass = 10
 numNeighbors = 5
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
@@ -122,7 +122,7 @@ updateStep = total_batch # after howmany batch update centroids and neighbors
 uStep = updateStep
 t = 0  
 Mmetric =Auc()
-pref = './cifar_myLoss_1024'
+pref = './cifar_new_128'
 for epoch in range(1,101):
     for batch in train_dataiter:   
         if uStep%updateStep ==0:
@@ -187,7 +187,7 @@ for epoch in range(1,101):
     print 'epoch validation:', epoch, 'Mloss:', Mmetric.get()
     Mmetric.reset()
     t=0
-    if (epoch)%10 == 0:
+    if (epoch)%5 == 0:
         print  'save model:epoch:',epoch
         mx.model.save_checkpoint(pref,epoch,  net,\
                              executor.arg_dict,executor.aux_dict)
