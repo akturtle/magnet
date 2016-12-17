@@ -43,7 +43,7 @@ def get_net(feature_len):
 #loading pretrianed  model 
 load_prefix = './cifar10_'
 load_epoch=1
-featureSize = 128
+featureSize = 16
 numClass = 10
 numNeighbors = 5
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
@@ -122,7 +122,7 @@ updateStep = total_batch # after howmany batch update centroids and neighbors
 uStep = updateStep
 t = 0  
 Mmetric =Auc()
-pref = './cifar_new_128'
+pref = './cifar_new_16'
 for epoch in range(1,101):
     for batch in train_dataiter:   
         if uStep%updateStep ==0:

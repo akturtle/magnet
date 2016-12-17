@@ -32,7 +32,7 @@ def KNN_test(DataIter,featureExector,splitRatio,n_neighbors,hash_len):
     features=[]
     for batch in DataIter:
         f = featureExector.predict(batch.data[0])
-        f = np.squeeze(f)
+        f = np.sign(np.squeeze(f))
         label = batch.label[0].asnumpy()
         labels.extend(label)
         features.extend(f)
@@ -57,14 +57,14 @@ def centroidScore(DataIter,featureExector,hash_len,centroids):
     CKN= KNeighborsClassifier(metric='euclidean',\
     		n_neighbors=1)
     centroid_label = [x for x in range(numClass)] 
-    CKN.fit(centroids,centroid_label)                  
+    CKN.fit(np.sign(centroids),centroid_label)                  
     batchSize = DataIter.provide_data[0][1][0]
     totalScore = 0
     cnt = 0
     print 'extract features'
     for batch in DataIter:
         f = featureExector.predict(batch.data[0])
-        f = np.squeeze(f)
+        f = np.sign(np.squeeze(f))
         label = batch.label[0].asnumpy()
         score = CKN.score(f,label)
         totalScore += batchSize *score
@@ -77,9 +77,9 @@ def centroidScore(DataIter,featureExector,hash_len,centroids):
   
   
   
-load_prefix = './cifar_new_128'
-load_epoch=79
-feature_size = 128
+load_prefix = './cifar_new_16'
+load_epoch=100
+feature_size = 16
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(feature_size)
 batchSize = 128
@@ -130,8 +130,8 @@ feature_extractor = mx.model.FeedForward(ctx=mx.gpu(), symbol=fea_symbol, \
                                        allow_extra_params=True)
 score = KNN_test(DataIter=test_dataiter,\
                  featureExector=feature_extractor,\
-                 splitRatio=0.1,
-                 n_neighbors=50,
+                 splitRatio=0.2,
+                 n_neighbors=5,
                  hash_len=feature_size) 
 print 'knn score :',score
 centroids = aux_params['myLoss_centroid_bias'].asnumpy()
