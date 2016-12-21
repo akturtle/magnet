@@ -1,6 +1,22 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
+Created on Tue Dec 20 14:29:32 2016
+
+@author: XFZ
+"""
+
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Dec 19 23:35:08 2016
+
+@author: XFZ
+"""
+
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+"""
 Created on Wed Dec  7 09:44:41 2016
 
 @author: XFZ
@@ -8,7 +24,7 @@ Created on Wed Dec  7 09:44:41 2016
 
 import mxnet as mx 
 import numpy as np
-from get_simple_inception import get_simplet_inception
+from inception_bn import get_inception_symbol
 from get_centroid import get_centroid
 from newLoss import *
 from math import isnan
@@ -28,7 +44,7 @@ class Auc(mx.metric.EvalMetric):
 
 def get_net(feature_len):
     label =  mx.sym.Variable('label')  
-    flatten = get_simplet_inception()
+    flatten = get_inception_symbol()
     fc = mx.symbol.FullyConnected(data=flatten, \
                                   num_hidden=feature_len, name='fc')
     bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
@@ -41,18 +57,18 @@ def get_net(feature_len):
     
 
 #loading pretrianed  model 
-load_prefix = './cifar10_'
-load_epoch=1
-featureSize = 8
+load_prefix = '../../model/inceptionBn/Inception-BN'
+load_epoch=126
+featureSize = 32
 numClass = 10
 numNeighbors = 5
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(featureSize)
-batchSize = 128
-input_shapes = {'data':(batchSize, 3, 28,28 ),'label':(batchSize,)} 
+batchSize = 32
+input_shapes = {'data':(batchSize, 3, 224,224 ),'label':(batchSize,)} 
 executor = net.simple_bind(ctx = mx.gpu(), **input_shapes)
 arg_arrays = dict(zip(net.list_arguments(), executor.arg_arrays))
-data = arg_arrays['data']
+data = arg_arrays['data']   
 label = arg_arrays['label']
 init = mx.init.Uniform(scale=2)
 all_centroids = []
@@ -76,32 +92,29 @@ for key in executor.aux_dict.keys():
 
 #loading dataIter
 
-total_batch = 50000 / 128 + 1
+total_batch = 50000 / 32 + 1
 # Train iterator make batch of 128 image, and random crop each image into 3x28x28 from original 3x32x32
 train_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="data/cifar/train.rec",
-        mean_img="data/cifar/cifar_mean.bin",
-        rand_crop=True,
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        rand_crop=False,
         rand_mirror=True,
-        data_shape=(3,28,28),
+        data_shape=(3,224,224),
         batch_size=batchSize,
         preprocess_threads=4)
 center_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="data/cifar/train.rec",
-        mean_img="data/cifar/cifar_mean.bin",
-        data_shape=(3,28,28),
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        data_shape=(3,224,224),
         batch_size=batchSize,
         preprocess_threads=4)
 # test iterator make batch of 128 image, and center crop each image into 3x28x28 from original 3x32x32
 # Note: We don't need round batch in test because we only test once at one time
 test_dataiter = mx.io.ImageRecordIter(
-        path_imgrec="data/cifar/test.rec",
-        mean_img="data/cifar/cifar_mean.bin",
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTest_224.bin",
         rand_crop=False,
         rand_mirror=False,
-        data_shape=(3,28,28),
+        data_shape=(3,224,224),
         batch_size=batchSize,
         round_batch=False,
         preprocess_threads=1)
@@ -122,7 +135,7 @@ updateStep = total_batch # after howmany batch update centroids and neighbors
 uStep = updateStep
 t = 0  
 Mmetric =Auc()
-pref = './cifar_new_8'
+pref = './cifar_inBn_32'
 #record total iter and loss 
 tIter = 0
 trainLoss = []
@@ -194,11 +207,11 @@ for epoch in range(1,101):
                              executor.arg_dict,executor.aux_dict)
 #save loss-iter
 import cPickle
-f1 = open('new_8_train_loss.data','w')
+f1 = open('IB_new_32_train_loss.data','w')
 cPickle.dump(trainLoss,f1)
 f1.close()
 
-f2= open('new_8_val_loss.data','w')
+f2= open('IB_new_32_val_loss.data','w')
 cPickle.dump(valLoss,f2)
 f2.close()
      

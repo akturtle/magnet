@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
-Created on Mon Dec 12 17:00:21 2016
+Created on Mon Dec 19 16:55:08 2016
 
 @author: XFZ
 """
@@ -9,23 +9,22 @@ Created on Mon Dec 12 17:00:21 2016
 import mxnet as mx
 import numpy as np
 from random import shuffle
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KDTree
 from newLoss import *
-from get_simple_inception import get_simplet_inception
+from inception_bn import get_inception_symbol
 def get_net(feature_len):
     label =  mx.sym.Variable('label')  
-    flatten = get_simplet_inception()
+    flatten = get_inception_symbol()
     fc = mx.symbol.FullyConnected(data=flatten, \
                                   num_hidden=feature_len, name='fc')
     bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
     myloss=mx.symbol.Custom(data=bn_fc,label=label,\
                                     name='myLoss',op_type = 'newLoss',\
-                                    nNeighbors = 5,alpha = 0.7,\
+                                    nNeighbors = 5,alpha = 0,\
                                     nClass = 10)
     loss = mx.symbol.MakeLoss(data=myloss,name='loss',)
     return loss
-def KNN_test(DataIter,featureExector,splitRatio,n_neighbors,hash_len):
-	#extrat feature by provide featureEx
+def get_feature(DataIter,featureExector):
     i=0
     print 'extract features'
     labels=[]
@@ -37,53 +36,16 @@ def KNN_test(DataIter,featureExector,splitRatio,n_neighbors,hash_len):
         labels.extend(label)
         features.extend(f)
         i+=1
-        #print i
-    data_label = zip(features,labels)
-    shuffle(data_label)
-    splitPoint = int(len(data_label)*splitRatio)
-    test = data_label[0:splitPoint]
-    train = data_label[splitPoint:]
-    test_data = [x for (x,y) in test]
-    test_label = [y for (x, y) in test]
-    train_data = [x for (x, y) in train]
-    train_label = [y for (x, y) in train]
-    neigh = KNeighborsClassifier(metric='euclidean',\
-    		n_neighbors=n_neighbors)
-    neigh.fit(train_data, train_label)
-    score = neigh.score(test_data,test_label)
-    return score
-def centroidScore(DataIter,featureExector,hash_len,centroids):
-    numClass = len(centroids)
-    CKN= KNeighborsClassifier(metric='euclidean',\
-    		n_neighbors=1)
-    centroid_label = [x for x in range(numClass)] 
-    CKN.fit(np.sign(centroids),centroid_label)                  
-    batchSize = DataIter.provide_data[0][1][0]
-    totalScore = 0
-    cnt = 0
-    print 'extract features'
-    for batch in DataIter:
-        f = featureExector.predict(batch.data[0])
-        f = np.sign(np.squeeze(f))
-        label = batch.label[0].asnumpy()
-        score = CKN.score(f,label)
-        totalScore += batchSize *score
-        cnt += batchSize
-    return totalScore/cnt
-  
-  
-  
-  
-  
-  
-  
-load_prefix = './save_model/cifar_new_32'
-load_epoch=100
+        print 'batch :',i
+    return features,labels
+
+load_prefix = './cifar_inBn_32'
+load_epoch=50
 feature_size = 32
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(feature_size)
-batchSize = 128
-input_shapes = {'data':(batchSize, 3, 28,28 ),'label':(batchSize,)} 
+batchSize = 32
+input_shapes = {'data':(batchSize, 3, 224,224 ),'label':(batchSize,)} 
 executor = net.simple_bind(ctx = mx.gpu(), **input_shapes)
 arg_arrays = dict(zip(net.list_arguments(), executor.arg_arrays))
 data = arg_arrays['data']
@@ -111,33 +73,46 @@ for key in executor.aux_dict.keys():
 total_batch = 50000 / 128 + 1
 # Train iterator make batch of 128 image, and random crop each image into 3x28x28 from original 3x32x3
 test_dataiter = mx.io.ImageRecordIter(
-        path_imgrec="data/cifar/test.rec",
-        mean_img="data/cifar/cifar_mean.bin",
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTest_224.bin",
         rand_crop=False,
         rand_mirror=False,
-        data_shape=(3,28,28),
+        data_shape=(3,224,224),
         batch_size=batchSize,
         round_batch=False,
-        preprocess_threads=1)
+        preprocess_threads=4)
 internals = net.get_internals()
 # get feature layer symbol out of internals
 #fea_symbol = internals["_minusscalar0_output"]
 fea_symbol = internals["bn_fc_output"]
 feature_extractor = mx.model.FeedForward(ctx=mx.gpu(), symbol=fea_symbol, \
-                                         numpy_batch_size=128,
+                                         numpy_batch_size=batchSize,
                                          arg_params=executor.arg_dict,\
                                          aux_params=executor.aux_dict,
                                        allow_extra_params=True)
-score = KNN_test(DataIter=test_dataiter,\
-                 featureExector=feature_extractor,\
-                 splitRatio=0.2,
-                 n_neighbors=5,
-                 hash_len=feature_size) 
-print 'knn score :',score
-centroids = aux_params['myLoss_centroid_bias'].asnumpy()
-test_dataiter.reset()
-cScore = centroidScore(DataIter=test_dataiter,\
-                       featureExector=feature_extractor,\
-                       hash_len=32,
-                       centroids = centroids)
-print cScore
+train_dataiter = mx.io.ImageRecordIter(
+        shuffle=True,
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        rand_crop=False,
+        rand_mirror=False,
+        data_shape=(3,224,224),
+        batch_size=batchSize,
+        preprocess_threads=4)
+
+trainFeature, trainLable = get_feature(train_dataiter,feature_extractor)
+testFeature, testLable = get_feature(test_dataiter,feature_extractor)
+tree = KDTree(trainFeature)
+i = 0
+MAP = 0
+for tF,tL in zip(testFeature,testLable):
+    _,inds = tree.query([tF],k=5000)
+    score = 0
+    for ind in inds[0]:
+      #print trainLable[ind],tL  
+      if trainLable[ind] == tL:
+            score +=1
+    score = float(score) / 5000
+    print score
+    MAP += score
+    i += 1
+
+print MAP/i 
