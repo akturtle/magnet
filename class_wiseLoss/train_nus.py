@@ -1,6 +1,14 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
+Created on Thu Dec 22 12:24:54 2016
+
+@author: XFZ
+"""
+
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+"""
 Created on Tue Dec 20 14:29:32 2016
 
 @author: XFZ
@@ -51,7 +59,7 @@ def get_net(feature_len):
     myloss=mx.symbol.Custom(data=bn_fc,label=label,\
                                     name='myLoss',op_type = 'newLoss',\
                                     nNeighbors = 5,alpha = 0,\
-                                    nClass = 10)
+                                    nClass = 21)
     loss = mx.symbol.MakeLoss(data=myloss,name='loss',)
     return loss
     
@@ -60,7 +68,7 @@ def get_net(feature_len):
 load_prefix = '../../model/inceptionBn/Inception-BN'
 load_epoch=126
 featureSize = 12
-numClass = 10
+numClass = 21
 numNeighbors = 5
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(featureSize)
@@ -92,11 +100,10 @@ for key in executor.aux_dict.keys():
 
 #loading dataIter
 
-total_batch = 50000 / batchSize + 1
 # Train iterator make batch of 128 image, and random crop each image into 3x28x28 from original 3x32x32
 train_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        path_imgrec="/home/XFZ/dataSet/nus_wide/train_linux.rec",
         rand_crop=False,
         rand_mirror=True,
         data_shape=(3,224,224),
@@ -104,22 +111,10 @@ train_dataiter = mx.io.ImageRecordIter(
         preprocess_threads=4)
 center_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        path_imgrec="/home/XFZ/dataSet/nus_wide/train_linux.rec",
         data_shape=(3,224,224),
         batch_size=batchSize,
         preprocess_threads=4)
-# test iterator make batch of 128 image, and center crop each image into 3x28x28 from original 3x32x32
-# Note: We don't need round batch in test because we only test once at one time
-test_dataiter = mx.io.ImageRecordIter(
-        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTest_224.bin",
-        rand_crop=False,
-        rand_mirror=False,
-        data_shape=(3,224,224),
-        batch_size=batchSize,
-        round_batch=False,
-        preprocess_threads=1)
-#start training
-#create ls_scheduler
 lr_scheduler =  mx.lr_scheduler.FactorScheduler(step = 200,factor = 0.998)
 #setting updater
 opt = mx.optimizer.SGD(
@@ -131,7 +126,7 @@ opt = mx.optimizer.SGD(
     )
 optt = mx.optimizer.Adam()
 updater = mx.optimizer.get_updater(optt)
-updateStep = total_batch # after howmany batch update centroids and neighbors 
+updateStep = 1000 # after howmany batch update centroids and neighbors 
 uStep = updateStep
 t = 0  
 Mmetric =Auc()
@@ -165,6 +160,7 @@ for epoch in range(1,101):
             n = mx.nd.array(neighbors)
             n.copyto(executor.aux_dict['myLoss_neighbors_bias'])
             uStep = 0
+            updateStep +=200
             if len( all_centroids) !=0:  
               c_diff = centroids - all_centroids[-1]
               c_diff = np.sum(np.square(c_diff))/centroids.shape[0]
@@ -186,19 +182,8 @@ for epoch in range(1,101):
             print 'epoch:', epoch, 'iter:', t, 'Mloss:', Mmetric.get()
             trainLoss.append((tIter,Mmetric.get()[1]))
             Mmetric.reset()
-        
         uStep += 1 
     train_dataiter.reset()
-    print 'validation:'
-    test_dataiter.reset()
-    Mmetric.reset()
-    for batch in test_dataiter:
-      data[:] = batch.data[0]
-      label[:] = batch.label[0]
-      executor.forward(is_train=True)
-      Mmetric.update(batch.label,executor.outputs)
-    print 'epoch validation:', epoch, 'Mloss:', Mmetric.get()
-    valLoss.append((tIter,Mmetric.get()[1]))
     Mmetric.reset()
     t=0
     if (epoch)%10 == 0:
@@ -207,11 +192,11 @@ for epoch in range(1,101):
                              executor.arg_dict,executor.aux_dict)
 #save loss-iter
 import cPickle
-f1 = open('IB_new_'+str(featureSize)+'_train_loss.data','w')
+f1 = open('IB_new_nusW'+str(featureSize)+'_train_loss.data','w')
 cPickle.dump(trainLoss,f1)
 f1.close()
 
-f2= open('IB_new_'+str(featureSize)+'_val_loss.data','w')
+f2= open('IB_new_nusW'+str(featureSize)+'_val_loss.data','w')
 cPickle.dump(valLoss,f2)
 f2.close()
      

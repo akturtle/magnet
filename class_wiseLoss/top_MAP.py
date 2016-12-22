@@ -39,12 +39,12 @@ def get_feature(DataIter,featureExector):
         print 'batch :',i
     return features,labels
 
-load_prefix = './cifar_inBn_32'
-load_epoch=50
-feature_size = 32
+feature_size = 12
+load_prefix = './cifar_inBn_'+str(feature_size)
+load_epoch=40
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(feature_size)
-batchSize = 32
+batchSize = 64
 input_shapes = {'data':(batchSize, 3, 224,224 ),'label':(batchSize,)} 
 executor = net.simple_bind(ctx = mx.gpu(), **input_shapes)
 arg_arrays = dict(zip(net.list_arguments(), executor.arg_arrays))
@@ -103,16 +103,36 @@ testFeature, testLable = get_feature(test_dataiter,feature_extractor)
 tree = KDTree(trainFeature)
 i = 0
 MAP = 0
+collectScore =[]
 for tF,tL in zip(testFeature,testLable):
     _,inds = tree.query([tF],k=5000)
     score = 0
-    for ind in inds[0]:
+    cnt = 0
+    for ii,ind in enumerate(inds[0]):
       #print trainLable[ind],tL  
       if trainLable[ind] == tL:
-            score +=1
-    score = float(score) / 5000
+        cnt += 1 
+        ap = float(cnt)/(ii+1)
+        score += ap
+    if cnt != 0:
+        score = float(score) / cnt
     print score
     MAP += score
     i += 1
 
 print MAP/i 
+#import cPickle
+#
+#f=open('trainHash.data','w')
+#cPickle.dump(trainFeature,f)
+#f.close()
+#f=open('trainLabel.data','w')
+#cPickle.dump(trainLable,f)
+#f.close()
+#f=open('testHash.data','w')
+#cPickle.dump(testFeature,f)
+#f.close()
+#f=open('testLabel.data','w')
+#cPickle.dump(testLable,f)
+#f.close()
+

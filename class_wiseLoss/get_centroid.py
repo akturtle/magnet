@@ -13,7 +13,10 @@ def get_centroid(DataIter,featureExtractor,
                  featureSize,numClasses,kNeighbors):
   centroids = np.zeros((numClasses,featureSize))
   cnt = np.zeros(numClasses)
+  ii = 0
   for batch in DataIter:
+    print ' update centroids:',ii
+    ii +=1
     features = featureExtractor.predict(batch.data[0])
     features = np.squeeze(features)
     labels = batch.label[0].asnumpy()
