@@ -10,19 +10,26 @@ import mxnet as mx
 import numpy as np
 from random import shuffle
 from sklearn.neighbors import KNeighborsClassifier
-from newLoss import *
+from beaconLoss import *
 from get_simple_inception import get_simplet_inception
 def get_net(feature_len):
     label =  mx.sym.Variable('label')  
     flatten = get_simplet_inception()
     fc = mx.symbol.FullyConnected(data=flatten, \
                                   num_hidden=feature_len, name='fc')
-    bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
-    myloss=mx.symbol.Custom(data=bn_fc,label=label,\
-                                    name='myLoss',op_type = 'newLoss',\
-                                    nNeighbors = 5,alpha = 0.7,\
+    myloss=mx.symbol.Custom(data=fc,label=label,\
+                                    name='myLoss',op_type = 'beaconLoss',\
+                                    nNeighbors = 5,alpha = 0,\
                                     nClass = 10)
-    loss = mx.symbol.MakeLoss(data=myloss,name='loss',)
+    myloss = mx.symbol.MakeLoss(data=myloss,name='mloss')
+    
+    leftRelu = mx.sym.Activation(data = -1-fc,act_type='relu',name = 'leftR')
+    rightRelu = mx.sym.Activation(data = fc-1,act_type='relu',name = 'rightR')
+    s = leftRelu+rightRelu
+    lc = mx.sym.sum(data =s,axis = 1,keepdims = 1,name = 'lc')
+    lcLoss = lc*weight/feature_len
+    lcLoss = mx.sym.MakeLoss(data= lc,name='lcLoss')
+    loss=mx.sym.Group([myloss,lcLoss] ) 
     return loss
 def KNN_test(DataIter,featureExector,splitRatio,n_neighbors,hash_len):
 	#extrat feature by provide featureEx
@@ -64,7 +71,8 @@ def centroidScore(DataIter,featureExector,hash_len,centroids):
     print 'extract features'
     for batch in DataIter:
         f = featureExector.predict(batch.data[0])
-        f = np.sign(np.squeeze(f))
+        #f = np.sign(np.squeeze(f))
+        f = np.squeeze(f)
         label = batch.label[0].asnumpy()
         score = CKN.score(f,label)
         totalScore += batchSize *score
@@ -77,9 +85,10 @@ def centroidScore(DataIter,featureExector,hash_len,centroids):
   
   
   
-load_prefix = './save_model/cifar_new_32'
-load_epoch=100
-feature_size = 32
+load_prefix = 'cifar_new_8'
+load_epoch=40
+feature_size = 16
+weight = 100
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(feature_size)
 batchSize = 128
@@ -122,7 +131,7 @@ test_dataiter = mx.io.ImageRecordIter(
 internals = net.get_internals()
 # get feature layer symbol out of internals
 #fea_symbol = internals["_minusscalar0_output"]
-fea_symbol = internals["bn_fc_output"]
+fea_symbol = internals["fc_output"]
 feature_extractor = mx.model.FeedForward(ctx=mx.gpu(), symbol=fea_symbol, \
                                          numpy_batch_size=128,
                                          arg_params=executor.arg_dict,\

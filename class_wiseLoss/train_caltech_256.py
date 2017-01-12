@@ -28,13 +28,11 @@ class Auc(mx.metric.EvalMetric):
         self.num_inst=0
     def update( self,labels, preds):
         pred = preds[0].asnumpy().reshape(-1)
-        pred = np.exp(-pred)-1
         self.sum_metric += np.sum(pred)
         self.num_inst += len(pred)
     def reset(self):
         self.sum_metric = 0
         self.num_inst = 0
-
 class AucL(mx.metric.EvalMetric):
     def __init__(self):
         super(AucL, self).__init__('lcLoss')
@@ -54,12 +52,12 @@ def get_net(feature_len,weight=100):
                                   num_hidden=feature_len, name='fc')
     myloss=mx.symbol.Custom(data=fc,label=label,\
                                     name='myLoss',op_type = 'beaconLoss',\
-                                    nNeighbors = 10,alpha = 0,\
-                                    nClass = 21)
+                                    nNeighbors = 5,alpha = 0,\
+                                    nClass = 257)
     myloss = mx.symbol.MakeLoss(data=myloss,name='mloss')
     
-    leftRelu = mx.sym.Activation(data = -1.2-fc,act_type='relu',name = 'leftR')
-    rightRelu = mx.sym.Activation(data = fc-1.2,act_type='relu',name = 'rightR')
+    leftRelu = mx.sym.Activation(data = -1.1-fc,act_type='relu',name = 'leftR')
+    rightRelu = mx.sym.Activation(data = fc-1.1,act_type='relu',name = 'rightR')
     s = leftRelu+rightRelu
     lc = mx.sym.sum(data =s,axis = 1,keepdims = 1,name = 'lc')
     lcLoss = lc*weight/feature_len
@@ -72,12 +70,12 @@ def get_net(feature_len,weight=100):
 load_prefix = '../../model/inceptionBn/Inception-BN'
 load_epoch=126
 featureSize = 32
-numClass = 21
-numNeighbors = 10
+numClass =257
+numNeighbors = 5
 weight = 10
-savePath = './nus_wide/'
-load_prefix='./nus_wide/nus_inBn_all_'+str(featureSize)
-load_epoch = 5
+data_prefix = '/home/XFZ/dataSet/voc2012/'
+load_prefix='./caltech_256/inBn_i_'+str(featureSize)
+load_epoch = 100
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(featureSize,weight)
 batchSize = 64
@@ -111,47 +109,42 @@ for key in executor.aux_dict.keys():
 # Train iterator make batch of 128 image, and random crop each image into 3x28x28 from original 3x32x32
 train_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="/home/XFZ/dataSet/nus_wide/train_linux.rec",
-        rand_crop=False,
+        path_imgrec= data_prefix+'caltech-256-60-train.rec',
+        rand_crop=True,
         rand_mirror=True,
         data_shape=(3,224,224),
         batch_size=batchSize,
         preprocess_threads=4)
 center_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="/home/XFZ/dataSet/nus_wide/train_linux.rec",
+        path_imgrec=data_prefix+'caltech-256-60-train.rec',
         data_shape=(3,224,224),
+        rand_crop=True,        
         batch_size=batchSize,
         preprocess_threads=4)
-test_dataiter = mx.io.ImageRecordIter(
-        shuffle=True,
-        path_imgrec="/home/XFZ/dataSet/nus_wide/test_500.rec",
-        data_shape=(3,224,224),
-        batch_size=batchSize,
-        preprocess_threads=4)
-lr_scheduler =  mx.lr_scheduler.FactorScheduler(step = 500,factor = 0.8)
+lr_scheduler =  mx.lr_scheduler.FactorScheduler(step = 200,factor = 0.998)
 #setting updater
 opt = mx.optimizer.SGD(
-    learning_rate=0.01,
+    learning_rate=0.001,
     momentum=0.9,
     wd=0.00001,
     rescale_grad=1.0/batchSize,
     lr_scheduler = lr_scheduler
     )
-optt = mx.optimizer.Adam(learning_rate=0.001)
+optt = mx.optimizer.Adam()
 updater = mx.optimizer.get_updater(optt)
-totalBatch = 1000000
-updateStep = totalBatch*1 # after howmany batch update centroids and neighbors 
+totalBatch = 241
+updateStep = totalBatch # after howmany batch update centroids and neighbors 
 uStep = 1
 t = 0  
 Mmetric =Auc()
 Lmetric = AucL()
-pref = savePath+'nus_inBn_all_v_'+str(featureSize)
+model_pref = './caltech_256/inBn_i_'+str(featureSize)
 #record total iter and loss 
 tIter = 0
 trainLoss = []
 valLoss = []
-for epoch in range(1,101):
+for epoch in range(101,150):
     for batch in train_dataiter:   
         if uStep%updateStep ==0:
             #get centroid and neighbor relation
@@ -198,26 +191,19 @@ for epoch in range(1,101):
         if t % 50 == 0:
             print 'epoch:', epoch, 'iter:', t, 'Mloss:', Mmetric.get(),\
                   'Lmetric',Lmetric.get()
+            trainLoss.append((tIter,Mmetric.get()[1]))       
         uStep += 1 
     train_dataiter.reset()
     Mmetric.reset()
-    test_dataiter.reset()
-    for batch in test_dataiter:
-      data[:] = batch.data[0]
-      label[:] = batch.label[0]
-      executor.forward(is_train=True)
-      Mmetric.update(batch.label,executor.outputs)
-    print 'epoch validation:', epoch, 'Mloss:', Mmetric.get()
-   
-    Mmetric.reset()
+    Lmetric.reset()
     t=0
-    if (epoch):
+    if (epoch)%5== 0:
         print  'save model:epoch:',epoch
-        mx.model.save_checkpoint(pref,epoch,  net,\
+        mx.model.save_checkpoint(model_pref,epoch,  net,\
                              executor.arg_dict,executor.aux_dict)
 #save loss-iter
 import cPickle
-f1 = open(savePath+'IB_new_nusW_i_'+str(featureSize)+'_train_loss.data','w')
+f1 = open('./caltech_256/'+'IB_new_i_2'+str(featureSize)+'_train_loss.data','w')
 cPickle.dump(trainLoss,f1)
 f1.close()
 

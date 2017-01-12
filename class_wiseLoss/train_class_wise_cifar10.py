@@ -8,14 +8,14 @@ Created on Wed Dec  7 09:44:41 2016
 
 import mxnet as mx 
 import numpy as np
-from get_simple_inception import get_simplet_inception
+from inception_bn import get_inception_symbol
 from get_centroid import get_centroid
-from newLoss import *
+from beaconLoss import *
 from math import isnan
 #define metric
 class Auc(mx.metric.EvalMetric):
     def __init__(self):
-        super(Auc, self).__init__('Loss')
+        super(Auc, self).__init__('myLoss')
         self.sum_metric=0
         self.num_inst=0
     def update( self,labels, preds):
@@ -25,31 +25,54 @@ class Auc(mx.metric.EvalMetric):
     def reset(self):
         self.sum_metric = 0
         self.num_inst = 0
-
-def get_net(feature_len):
+class AucL(mx.metric.EvalMetric):
+    def __init__(self):
+        super(AucL, self).__init__('lcLoss')
+        self.sum_metric=0
+        self.num_inst=0
+    def update( self,labels, preds):
+        pred = preds[1].asnumpy().reshape(-1)
+        self.sum_metric += np.sum(pred)
+        self.num_inst += len(pred)
+    def reset(self):
+        self.sum_metric = 0
+        self.num_inst = 0
+def get_net(feature_len,weight):
     label =  mx.sym.Variable('label')  
-    flatten = get_simplet_inception()
+    flatten = get_inception_symbol()
     fc = mx.symbol.FullyConnected(data=flatten, \
                                   num_hidden=feature_len, name='fc')
-    bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
-    myloss=mx.symbol.Custom(data=bn_fc,label=label,\
-                                    name='myLoss',op_type = 'newLoss',\
+#    bn_fc = mx.sym.L2Normalization(data=fc,name = 'bn_fc')
+    myloss=mx.symbol.Custom(data=fc,label=label,\
+                                    name='myLoss',op_type = 'beaconLoss',\
                                     nNeighbors = 5,alpha = 0,\
                                     nClass = 10)
-    loss = mx.symbol.MakeLoss(data=myloss,name='loss',)
+    myloss = mx.symbol.MakeLoss(data=myloss,name='mloss')
+    
+    leftRelu = mx.sym.Activation(data = -1.2-fc,act_type='relu',name = 'leftR')
+    rightRelu = mx.sym.Activation(data = fc-1.2,act_type='relu',name = 'rightR')
+    s = leftRelu+rightRelu
+    lc = mx.sym.sum(data =s,axis = 1,keepdims = 1,name = 'lc')
+    lcLoss = lc*weight/feature_len
+    lcLoss = mx.sym.MakeLoss(data= lc,name='lcLoss')
+    loss=mx.sym.Group([myloss,lcLoss] ) 
     return loss
     
 
 #loading pretrianed  model 
-load_prefix = './cifar10_'
-load_epoch=1
-featureSize = 8
+load_prefix = '../../model/inceptionBn/Inception-BN'
+load_epoch=126
+featureSize = 48
+load_prefix = './cifar/cifar_new_'+str(featureSize)
+load_epoch=20
+
 numClass = 10
 numNeighbors = 5
+weight = 10
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
-net = get_net(featureSize)
-batchSize = 128
-input_shapes = {'data':(batchSize, 3, 28,28 ),'label':(batchSize,)} 
+net = get_net(featureSize,weight)
+batchSize = 64
+input_shapes = {'data':(batchSize, 3, 224,224 ),'label':(batchSize,)} 
 executor = net.simple_bind(ctx = mx.gpu(), **input_shapes)
 arg_arrays = dict(zip(net.list_arguments(), executor.arg_arrays))
 data = arg_arrays['data']
@@ -76,32 +99,29 @@ for key in executor.aux_dict.keys():
 
 #loading dataIter
 
-total_batch = 50000 / 128 + 1
+total_batch = 50000 / 64 + 1
 # Train iterator make batch of 128 image, and random crop each image into 3x28x28 from original 3x32x32
 train_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="data/cifar/train.rec",
-        mean_img="data/cifar/cifar_mean.bin",
-        rand_crop=True,
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        rand_crop=False,
         rand_mirror=True,
-        data_shape=(3,28,28),
+        data_shape=(3,224,224),
         batch_size=batchSize,
         preprocess_threads=4)
 center_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
-        path_imgrec="data/cifar/train.rec",
-        mean_img="data/cifar/cifar_mean.bin",
-        data_shape=(3,28,28),
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
+        data_shape=(3,224,224),
         batch_size=batchSize,
         preprocess_threads=4)
 # test iterator make batch of 128 image, and center crop each image into 3x28x28 from original 3x32x32
 # Note: We don't need round batch in test because we only test once at one time
 test_dataiter = mx.io.ImageRecordIter(
-        path_imgrec="data/cifar/test.rec",
-        mean_img="data/cifar/cifar_mean.bin",
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTest_224.bin",
         rand_crop=False,
         rand_mirror=False,
-        data_shape=(3,28,28),
+        data_shape=(3,224,224),
         batch_size=batchSize,
         round_batch=False,
         preprocess_threads=1)
@@ -122,20 +142,21 @@ updateStep = total_batch # after howmany batch update centroids and neighbors
 uStep = updateStep
 t = 0  
 Mmetric =Auc()
-pref = './cifar_new_8'
+Lmetric = AucL()
+pref = './cifar/cifar_new_'+str(featureSize)
 #record total iter and loss 
 tIter = 0
 trainLoss = []
 valLoss = []
-for epoch in range(1,101):
+for epoch in range(21,101):
     for batch in train_dataiter:   
         if uStep%updateStep ==0:
             #get centroid and neighbor relation
             print 'update centroids'
             internals = net.get_internals()
-            fea_symbol = internals["bn_fc_output"]
+            fea_symbol = internals["fc_output"]
             feature_extractor = mx.model.FeedForward(ctx=mx.gpu(), symbol=fea_symbol, \
-                                               numpy_batch_size=128,
+                                               numpy_batch_size=batchSize,
                                                arg_params=executor.arg_dict,\
                                                aux_params=executor.aux_dict,
                                              allow_extra_params=True) 
@@ -167,18 +188,22 @@ for epoch in range(1,101):
             weight, grad = pair
             updater(i, grad, weight)
         Mmetric.update(batch.label,executor.outputs)
+        Lmetric.update(batch.label,executor.outputs)
         t += 1
         tIter +=1 
         if t % 50 == 0:
-            print 'epoch:', epoch, 'iter:', t, 'Mloss:', Mmetric.get()
+            print 'epoch:', epoch, 'iter:', t, 'Mloss:', Mmetric.get(),\
+                  'Lmetric',Lmetric.get()
             trainLoss.append((tIter,Mmetric.get()[1]))
             Mmetric.reset()
+            Lmetric.reset()
         
         uStep += 1 
     train_dataiter.reset()
     print 'validation:'
     test_dataiter.reset()
     Mmetric.reset()
+    Lmetric.reset()
     for batch in test_dataiter:
       data[:] = batch.data[0]
       label[:] = batch.label[0]
@@ -194,11 +219,11 @@ for epoch in range(1,101):
                              executor.arg_dict,executor.aux_dict)
 #save loss-iter
 import cPickle
-f1 = open('new_8_train_loss.data','w')
+f1 = open('./cifar/new_'+str(featureSize)+'_train_loss1.data','w')
 cPickle.dump(trainLoss,f1)
 f1.close()
 
-f2= open('new_8_val_loss.data','w')
+f2= open('./cifar/new_'+str(featureSize)+'_val_loss.data1','w')
 cPickle.dump(valLoss,f2)
 f2.close()
      

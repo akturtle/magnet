@@ -1,6 +1,14 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
+Created on Sun Jan  8 15:32:23 2017
+
+@author: XFZ
+"""
+
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+"""
 Created on Mon Dec 19 16:55:08 2016
 
 @author: XFZ
@@ -40,7 +48,7 @@ def get_net(feature_len,weight=100):
     myloss=mx.symbol.Custom(data=fc,label=label,\
                                     name='myLoss',op_type = 'beaconLoss',\
                                     nNeighbors = 5,alpha = 0,\
-                                    nClass = 30)
+                                    nClass = 10)
     myloss = mx.symbol.MakeLoss(data=myloss,name='mloss')
     
     leftRelu = mx.sym.Activation(data = -1.5-fc,act_type='relu',name = 'leftR')
@@ -68,11 +76,11 @@ def get_feature(DataIter,featureExector):
           print 'batch :',i
     return features,labels
 
-feature_size = 32
+feature_size = 24
 #load_prefix = './cifar_inBn_'+str(feature_size)
 load_prefix = './nus_wide/nus_inBn_i_32'
-load_prefix = './ilsvrc12/inBn_i_'+str(feature_size)
-load_epoch= 110
+load_prefix = './cifar/cifar_new_'+str(feature_size)
+load_epoch=80
 sym,arg_params,aux_params = mx.model.load_checkpoint(load_prefix, load_epoch)
 net = get_net(feature_size)
 batchSize = 64
@@ -106,7 +114,7 @@ total_batch = 50000 / 128 + 1
 # Train iterator make batch of 128 image, and random crop each image into 3x28x28 from original 3x32x3
 test_dataiter = mx.io.ImageRecordIter(
         #path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTest_224.bin",
-        path_imgrec = data_prefix+'ilsvrc12_30_test.rec',
+        path_imgrec = "/home/XFZ/dataSet/cifar10/cifar_224/cifarTest_224.bin",
         rand_crop=False,
         rand_mirror=False,
         data_shape=(3,224,224),
@@ -125,7 +133,7 @@ feature_extractor = mx.model.FeedForward(ctx=mx.gpu(), symbol=fea_symbol, \
 train_dataiter = mx.io.ImageRecordIter(
         shuffle=True,
         #path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
-        path_imgrec=data_prefix+'ilsvrc12_30_train.rec',
+        path_imgrec="/home/XFZ/dataSet/cifar10/cifar_224/cifarTrain_224.bin",
         rand_crop=False,
         rand_mirror=False,
         data_shape=(3,224,224),
@@ -160,7 +168,7 @@ print MAP/i
 centroids = aux_params['myLoss_centroid_bias'].asnumpy()
 test_dataiter.reset()
 train_dataiter.reset()
-cScore = centroidScore(DataIter=train_dataiter,\
+cScore = centroidScore(DataIter=test_dataiter,\
                        featureExector=feature_extractor,\
                        hash_len=32,
                        centroids = centroids)

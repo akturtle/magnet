@@ -15,7 +15,8 @@ def get_centroid(DataIter,featureExtractor,
   cnt = np.zeros(numClasses)
   ii = 0
   for batch in DataIter:
-    print ' update centroids:',ii
+    if ii%50==0:
+      print ' update centroids:',ii
     ii +=1
     features = featureExtractor.predict(batch.data[0])
     features = np.squeeze(features)
